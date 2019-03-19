@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/martinohmann/godog-db/datatable"
+	"github.com/martinohmann/godog-helpers/datatable"
 )
 
 // DiffResult is a container for datatables of matching, missing and additional

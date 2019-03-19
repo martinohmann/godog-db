@@ -21,9 +21,10 @@ func initDB(db *sql.DB) {
 }
 
 func TestMain(m *testing.M) {
-	c := godogdb.NewFeatureContext("sqlite3", "./godog.db", initDB)
-
-	status := godog.RunWithOptions("godog", c.Register, godog.Options{
+	status := godog.RunWithOptions("godog", func(s *godog.Suite) {
+		c := godogdb.NewFeatureContext("sqlite3", "./godog.db", initDB)
+		c.Register(s)
+	}, godog.Options{
 		Format: "progress",
 		Paths:  []string{"features"},
 	})

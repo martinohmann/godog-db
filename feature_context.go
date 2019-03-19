@@ -11,8 +11,8 @@ import (
 	txdb "github.com/DATA-DOG/go-txdb"
 	"github.com/DATA-DOG/godog"
 	"github.com/DATA-DOG/godog/gherkin"
-	"github.com/martinohmann/godog-db/datatable"
 	"github.com/martinohmann/godog-db/queries"
+	"github.com/martinohmann/godog-helpers/datatable"
 )
 
 // txDBDriver defines a custom driver name for go-txdb.

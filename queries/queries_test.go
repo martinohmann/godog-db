@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"github.com/martinohmann/godog-db/datatable"
+	"github.com/martinohmann/godog-helpers/datatable"
 )
 
 func createMockDB() (*sql.DB, sqlmock.Sqlmock) {
