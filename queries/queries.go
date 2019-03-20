@@ -37,20 +37,20 @@ func DeleteAllRows(db *sql.DB, tableName string) error {
 
 // Insert inserts all rows in the datatable into the given table.
 func Insert(db *sql.DB, tableName string, data *datatable.DataTable) error {
-	marks := make([]string, len(data.Fields))
+	marks := make([]string, len(data.Fields()))
 
-	for i := range data.Fields {
+	for i := range data.Fields() {
 		marks[i] = "?"
 	}
 
 	query := fmt.Sprintf(
 		"INSERT INTO `%s` (%s) VALUES(%s)",
 		tableName,
-		strings.Join(data.Fields, ","),
+		strings.Join(data.Fields(), ","),
 		strings.Join(marks, ","),
 	)
 
-	for _, row := range data.Rows {
+	for _, row := range data.RowValues() {
 		var values []interface{}
 		for _, val := range row {
 			values = append(values, val)
@@ -69,7 +69,7 @@ func Insert(db *sql.DB, tableName string, data *datatable.DataTable) error {
 func Diff(db *sql.DB, tableName string, expected *datatable.DataTable) (*DiffResult, error) {
 	query := fmt.Sprintf(
 		"SELECT %s FROM `%s`",
-		strings.Join(expected.Fields, ","),
+		strings.Join(expected.Fields(), ","),
 		tableName,
 	)
 
@@ -84,11 +84,13 @@ func Diff(db *sql.DB, tableName string, expected *datatable.DataTable) (*DiffRes
 	}
 
 	rawResult, values := createRawResult(len(cols))
+	missing, _ := datatable.New(expected.Fields())
+	additional, _ := datatable.New(expected.Fields())
 
 	result := &DiffResult{
 		Missing:    expected.Copy(),
-		Matching:   datatable.New(expected.Fields),
-		Additional: datatable.New(expected.Fields),
+		Matching:   missing,
+		Additional: additional,
 	}
 
 	for rows.Next() {

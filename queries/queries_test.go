@@ -55,13 +55,13 @@ func TestDeleteAllRows(t *testing.T) {
 func TestInsert(t *testing.T) {
 	db, mock := createMockDB()
 
-	dt := &datatable.DataTable{
-		Fields: []string{"firstname", "lastname"},
-		Rows: [][]string{
+	dt, _ := datatable.New(
+		[]string{"firstname", "lastname"},
+		[][]string{
 			{"jane", "doe"},
 			{"john", "gopher"},
-		},
-	}
+		}...,
+	)
 
 	mock.ExpectExec("INSERT INTO `users` (firstname,lastname) VALUES(?,?)").
 		WithArgs("jane", "doe").
@@ -82,14 +82,14 @@ func TestInsert(t *testing.T) {
 func TestDiff(t *testing.T) {
 	db, mock := createMockDB()
 
-	dt := &datatable.DataTable{
-		Fields: []string{"thing"},
-		Rows: [][]string{
+	dt, _ := datatable.New(
+		[]string{"thing"},
+		[][]string{
 			{"bread"},
 			{"butter"},
 			{"sausage"},
-		},
-	}
+		}...,
+	)
 
 	rows := sqlmock.NewRows([]string{"thing"}).
 		AddRow("bread").
