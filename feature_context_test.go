@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DATA-DOG/godog"
+	"github.com/cucumber/godog"
 	godogdb "github.com/martinohmann/godog-db"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -21,17 +21,20 @@ func initDB(db *sql.DB) {
 }
 
 func TestMain(m *testing.M) {
-	status := godog.RunWithOptions("godog", func(s *godog.Suite) {
-		c := godogdb.NewFeatureContext("sqlite3", "./godog.db", initDB)
-		c.Register(s)
-	}, godog.Options{
+	c := godogdb.NewFeatureContext("sqlite3", "./godog.db", initDB)
+
+	opts := godog.Options{
 		Format: "progress",
 		Paths:  []string{"features"},
-	})
-
-	if st := m.Run(); st > status {
-		status = st
 	}
+
+	suite := godog.TestSuite{
+		Options:             &opts,
+		ScenarioInitializer: c.Register,
+		Name:                "integration",
+	}
+
+	status := suite.Run()
 
 	os.Exit(status)
 }

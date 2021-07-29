@@ -6,11 +6,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	txdb "github.com/DATA-DOG/go-txdb"
-	"github.com/DATA-DOG/godog"
-	"github.com/DATA-DOG/godog/gherkin"
+	"github.com/cucumber/godog"
+	"github.com/cucumber/messages-go/v10"
 	"github.com/martinohmann/godog-db/queries"
 	"github.com/martinohmann/godog-helpers/datatable"
 )
@@ -72,8 +73,8 @@ func (c *FeatureContext) theTableIsEmpty(tableName string) error {
 }
 
 // iHaveFollowingRowsInTable inserts all rows from the data table into given table.
-func (c *FeatureContext) iHaveFollowingRowsInTable(tableName string, data *gherkin.DataTable) error {
-	table, err := datatable.FromGherkin(data)
+func (c *FeatureContext) iHaveFollowingRowsInTable(tableName string, data *godog.Table) error {
+	table, err := toDataTable(data)
 	if err != nil {
 		return err
 	}
@@ -81,17 +82,17 @@ func (c *FeatureContext) iHaveFollowingRowsInTable(tableName string, data *gherk
 	return queries.Insert(c.db, tableName, table)
 }
 
-func (c *FeatureContext) iShouldHaveOnlyFollowingRowsInTable(tableName string, data *gherkin.DataTable) error {
+func (c *FeatureContext) iShouldHaveOnlyFollowingRowsInTable(tableName string, data *godog.Table) error {
 	return c.diff(tableName, data, true)
 }
 
-func (c *FeatureContext) iShouldHaveFollowingRowsInTable(tableName string, data *gherkin.DataTable) error {
+func (c *FeatureContext) iShouldHaveFollowingRowsInTable(tableName string, data *godog.Table) error {
 	return c.diff(tableName, data, false)
 }
 
 // diff asserts whether or not all rows present in the data table are also present in given table.
-func (c *FeatureContext) diff(tableName string, data *gherkin.DataTable, exact bool) error {
-	expected, err := datatable.FromGherkin(data)
+func (c *FeatureContext) diff(tableName string, data *godog.Table, exact bool) error {
+	expected, err := toDataTable(data)
 	if err != nil {
 		return err
 	}
@@ -119,7 +120,7 @@ func (c *FeatureContext) diff(tableName string, data *gherkin.DataTable, exact b
 		return errors.New(msg)
 	} else if exact && result.Additional.Len() > 0 {
 		return fmt.Errorf(
-			"Found unexpected additional rows:\n%s",
+			"found unexpected additional rows:\n%s",
 			result.Additional.PrettyJSON(),
 		)
 	}
@@ -147,16 +148,45 @@ func (c *FeatureContext) iShouldHaveCountRowsInTable(expectedCount int, tableNam
 }
 
 // Register registers the feature context to the godog suite.
-func (c *FeatureContext) Register(s *godog.Suite) {
-	s.BeforeScenario(c.beforeScenario)
+func (c *FeatureContext) Register(ctx *godog.ScenarioContext) {
+	ctx.BeforeScenario(func(s *godog.Scenario) {
+		c.beforeScenario(s)
+	})
 
 	// Given/When
-	s.Step(`^the table "([^"]*)" is empty$`, c.theTableIsEmpty)
-	s.Step(`^I have following rows in table "([^"]*)":$`, c.iHaveFollowingRowsInTable)
+	ctx.Step(`^the table "([^"]*)" is empty$`, c.theTableIsEmpty)
+	ctx.Step(`^I have following rows in table "([^"]*)":$`, c.iHaveFollowingRowsInTable)
 
 	// Then
-	s.Step(`^the table "([^"]*)" should be empty$`, c.theTableShouldBeEmpty)
-	s.Step(`^I should have (\d+) rows? in table "([^"]*)"$`, c.iShouldHaveCountRowsInTable)
-	s.Step(`^I should have following rows in table "([^"]*)":$`, c.iShouldHaveFollowingRowsInTable)
-	s.Step(`^I should have only following rows in table "([^"]*)":$`, c.iShouldHaveOnlyFollowingRowsInTable)
+	ctx.Step(`^the table "([^"]*)" should be empty$`, c.theTableShouldBeEmpty)
+	ctx.Step(`^I should have (\d+) rows? in table "([^"]*)"$`, c.iShouldHaveCountRowsInTable)
+	ctx.Step(`^I should have following rows in table "([^"]*)":$`, c.iShouldHaveFollowingRowsInTable)
+	ctx.Step(`^I should have only following rows in table "([^"]*)":$`, c.iShouldHaveOnlyFollowingRowsInTable)
+}
+
+func toDataTable(table *godog.Table) (*datatable.DataTable, error) {
+	rs := table.GetRows()
+	fields, rows := rs[0], rs[1:]
+
+	return datatable.New(collectValues(fields), collectRowsValues(rows)...)
+}
+
+func collectRowsValues(rows []*messages.PickleStepArgument_PickleTable_PickleTableRow) [][]string {
+	values := make([][]string, 0, len(rows))
+
+	for _, row := range rows {
+		values = append(values, collectValues(row))
+	}
+
+	return values
+}
+
+func collectValues(row *messages.PickleStepArgument_PickleTable_PickleTableRow) []string {
+	values := make([]string, 0, row.Size())
+
+	for _, c := range row.GetCells() {
+		values = append(values, strings.TrimSpace(c.GetValue()))
+	}
+
+	return values
 }
