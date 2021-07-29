@@ -1,10 +1,7 @@
 package queries
 
 import (
-	"database/sql"
-	"fmt"
-	"strings"
-
+	"github.com/doug-martin/goqu/v9"
 	"github.com/martinohmann/godog-helpers/datatable"
 )
 
@@ -15,48 +12,48 @@ type DiffResult struct {
 }
 
 // CountRows counts the rows in given table.
-func CountRows(db *sql.DB, tableName string) (int, error) {
-	var count int
+func CountRows(db *goqu.Database, tableName string) (int, error) {
+	count, err := db.From(tableName).Count()
 
-	query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", tableName)
-
-	row := db.QueryRow(query)
-	if err := row.Scan(&count); err != nil {
-		return 0, err
-	}
-
-	return count, nil
+	return int(count), err
 }
 
 // DeleteAllRows deletes all rows from a table.
-func DeleteAllRows(db *sql.DB, tableName string) error {
-	_, err := db.Exec(fmt.Sprintf("DELETE FROM `%s`", tableName))
+func DeleteAllRows(db *goqu.Database, tableName string) error {
+	query := db.Delete(tableName)
+	sql, _, err := query.ToSQL()
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(sql)
 
 	return err
 }
 
 // Insert inserts all rows in the datatable into the given table.
-func Insert(db *sql.DB, tableName string, data *datatable.DataTable) error {
-	marks := make([]string, len(data.Fields()))
+func Insert(db *goqu.Database, tableName string, data *datatable.DataTable) error {
+	fields := data.Fields()
+	cls := make([]interface{}, 0, len(fields))
 
-	for i := range data.Fields() {
-		marks[i] = "?"
+	for _, val := range fields {
+		cls = append(cls, val)
 	}
 
-	query := fmt.Sprintf(
-		"INSERT INTO `%s` (%s) VALUES(%s)",
-		tableName,
-		strings.Join(data.Fields(), ","),
-		strings.Join(marks, ","),
-	)
-
 	for _, row := range data.RowValues() {
-		var values []interface{}
+		vals := make(goqu.Vals, 0, len(row))
+
 		for _, val := range row {
-			values = append(values, val)
+			vals = append(vals, val)
 		}
 
-		if _, err := db.Exec(query, values...); err != nil {
+		query := db.Insert(tableName).Prepared(true).Cols(cls...).Vals(vals)
+		sql, args, err := query.ToSQL()
+		if err != nil {
+			return err
+		}
+
+		if _, err := db.Exec(sql, args...); err != nil {
 			return err
 		}
 	}
@@ -66,14 +63,21 @@ func Insert(db *sql.DB, tableName string, data *datatable.DataTable) error {
 
 // Diff queries for all rows in given table and returns a DiffResult with
 // matching, missing and additional rows.
-func Diff(db *sql.DB, tableName string, expected *datatable.DataTable) (*DiffResult, error) {
-	query := fmt.Sprintf(
-		"SELECT %s FROM `%s`",
-		strings.Join(expected.Fields(), ","),
-		tableName,
-	)
+func Diff(db *goqu.Database, tableName string, expected *datatable.DataTable) (*DiffResult, error) {
+	fields := expected.Fields()
+	cls := make([]interface{}, 0, len(fields))
 
-	rows, err := db.Query(query)
+	for _, val := range fields {
+		cls = append(cls, val)
+	}
+
+	query := db.Select(cls...).From(tableName)
+	sql, _, err := query.ToSQL()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.Query(sql)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +119,7 @@ func createRawResult(cols int) ([][]byte, []interface{}) {
 	rawResult := make([][]byte, cols)
 
 	values := make([]interface{}, cols)
-	for i, _ := range rawResult {
+	for i := range rawResult {
 		values[i] = &rawResult[i]
 	}
 

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/doug-martin/goqu/v9"
+	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	"github.com/martinohmann/godog-helpers/datatable"
 )
 
@@ -20,11 +22,12 @@ func createMockDB() (*sql.DB, sqlmock.Sqlmock) {
 
 func TestCountRows(t *testing.T) {
 	db, mock := createMockDB()
+	qb := goqu.New("sqlite3", db)
 
 	rows := sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(5)
-	mock.ExpectQuery("SELECT COUNT(*) FROM `users`").WillReturnRows(rows)
+	mock.ExpectQuery("SELECT COUNT(*) AS `count` FROM `users` LIMIT 1").WillReturnRows(rows)
 
-	count, err := CountRows(db, "users")
+	count, err := CountRows(qb, "users")
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err.Error())
 	}
@@ -40,10 +43,11 @@ func TestCountRows(t *testing.T) {
 
 func TestDeleteAllRows(t *testing.T) {
 	db, mock := createMockDB()
+	qb := goqu.New("sqlite3", db)
 
 	mock.ExpectExec("DELETE FROM `users`").WillReturnResult(sqlmock.NewResult(1, 1))
 
-	if err := DeleteAllRows(db, "users"); err != nil {
+	if err := DeleteAllRows(qb, "users"); err != nil {
 		t.Fatalf("unexpected error: %s", err.Error())
 	}
 
@@ -54,6 +58,7 @@ func TestDeleteAllRows(t *testing.T) {
 
 func TestInsert(t *testing.T) {
 	db, mock := createMockDB()
+	qb := goqu.New("sqlite3", db)
 
 	dt, _ := datatable.New(
 		[]string{"firstname", "lastname"},
@@ -63,14 +68,14 @@ func TestInsert(t *testing.T) {
 		}...,
 	)
 
-	mock.ExpectExec("INSERT INTO `users` (firstname,lastname) VALUES(?,?)").
+	mock.ExpectExec("INSERT INTO `users` (`firstname`, `lastname`) VALUES (?, ?)").
 		WithArgs("jane", "doe").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("INSERT INTO `users` (firstname,lastname) VALUES(?,?)").
+	mock.ExpectExec("INSERT INTO `users` (`firstname`, `lastname`) VALUES (?, ?)").
 		WithArgs("john", "gopher").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	if err := Insert(db, "users", dt); err != nil {
+	if err := Insert(qb, "users", dt); err != nil {
 		t.Fatalf("unexpected error: %s", err.Error())
 	}
 
@@ -81,6 +86,7 @@ func TestInsert(t *testing.T) {
 
 func TestDiff(t *testing.T) {
 	db, mock := createMockDB()
+	qb := goqu.New("sqlite3", db)
 
 	dt, _ := datatable.New(
 		[]string{"thing"},
@@ -96,9 +102,9 @@ func TestDiff(t *testing.T) {
 		AddRow("sausage").
 		AddRow("cheese")
 
-	mock.ExpectQuery("SELECT thing FROM `things`").WillReturnRows(rows)
+	mock.ExpectQuery("SELECT `thing` FROM `things`").WillReturnRows(rows)
 
-	result, err := Diff(db, "things", dt)
+	result, err := Diff(qb, "things", dt)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err.Error())
 	}

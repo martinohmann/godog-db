@@ -12,6 +12,11 @@ import (
 	txdb "github.com/DATA-DOG/go-txdb"
 	"github.com/cucumber/godog"
 	"github.com/cucumber/messages-go/v10"
+	"github.com/doug-martin/goqu/v9"
+	_ "github.com/doug-martin/goqu/v9/dialect/mysql"
+	_ "github.com/doug-martin/goqu/v9/dialect/postgres"
+	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
+	_ "github.com/doug-martin/goqu/v9/dialect/sqlserver"
 	"github.com/martinohmann/godog-db/queries"
 	"github.com/martinohmann/godog-helpers/datatable"
 )
@@ -19,13 +24,15 @@ import (
 // txDBDriver defines a custom driver name for go-txdb.
 const txDBDriver = "txdb-godog-db"
 
+type DBInitializeFn func(*sql.DB)
+
 // FeatureContext adds steps to setup and verify database contents during godog
 // tests.
 type FeatureContext struct {
-	db       *sql.DB
-	dbDriver string
-	dsn      string
-	initDB   func(*sql.DB)
+	dsn, driver string
+	db          *sql.DB
+	qb          *goqu.Database
+	initDB      DBInitializeFn
 }
 
 var once sync.Once
@@ -35,17 +42,17 @@ var once sync.Once
 // *sql.DB. The init function is called before every scenario and can be used
 // to pass the db handle to the tested application or run setup like database
 // migrations.
-func NewFeatureContext(dbDriver, dsn string, initDB func(*sql.DB)) *FeatureContext {
+func NewFeatureContext(driver, dsn string, initDB DBInitializeFn) *FeatureContext {
 	return &FeatureContext{
-		dbDriver: dbDriver,
-		dsn:      dsn,
-		initDB:   initDB,
+		dsn:    dsn,
+		driver: driver,
+		initDB: initDB,
 	}
 }
 
 // registerTxDB registers txdb.
 func (c *FeatureContext) registerTxDB() {
-	txdb.Register(txDBDriver, c.dbDriver, c.dsn)
+	txdb.Register(txDBDriver, c.driver, c.dsn)
 }
 
 // beforeScenario is called before each scenario and resets the database.
@@ -61,6 +68,7 @@ func (c *FeatureContext) beforeScenario(interface{}) {
 	}
 
 	c.db = db
+	c.qb = goqu.New(c.driver, db)
 
 	if c.initDB != nil {
 		c.initDB(db)
@@ -69,7 +77,7 @@ func (c *FeatureContext) beforeScenario(interface{}) {
 
 // theTableIsEmpty deletes all rows from given table.
 func (c *FeatureContext) theTableIsEmpty(tableName string) error {
-	return queries.DeleteAllRows(c.db, tableName)
+	return queries.DeleteAllRows(c.qb, tableName)
 }
 
 // iHaveFollowingRowsInTable inserts all rows from the data table into given table.
@@ -79,7 +87,7 @@ func (c *FeatureContext) iHaveFollowingRowsInTable(tableName string, data *godog
 		return err
 	}
 
-	return queries.Insert(c.db, tableName, table)
+	return queries.Insert(c.qb, tableName, table)
 }
 
 func (c *FeatureContext) iShouldHaveOnlyFollowingRowsInTable(tableName string, data *godog.Table) error {
@@ -97,7 +105,7 @@ func (c *FeatureContext) diff(tableName string, data *godog.Table, exact bool) e
 		return err
 	}
 
-	result, err := queries.Diff(c.db, tableName, expected)
+	result, err := queries.Diff(c.qb, tableName, expected)
 	if err != nil {
 		return err
 	}
@@ -135,7 +143,7 @@ func (c *FeatureContext) theTableShouldBeEmpty(tableName string) error {
 
 // iShouldHaveCountRowsInTable asserts whether or not there is a certain number of rows in given table.
 func (c *FeatureContext) iShouldHaveCountRowsInTable(expectedCount int, tableName string) error {
-	count, err := queries.CountRows(c.db, tableName)
+	count, err := queries.CountRows(c.qb, tableName)
 	if err != nil {
 		return err
 	}
