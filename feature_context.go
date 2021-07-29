@@ -29,6 +29,7 @@ type DBInitializeFn func(*sql.DB)
 // FeatureContext adds steps to setup and verify database contents during godog
 // tests.
 type FeatureContext struct {
+	useTxDB     bool
 	dsn, driver string
 	db          *sql.DB
 	qb          *goqu.Database
@@ -44,9 +45,10 @@ var once sync.Once
 // migrations.
 func NewFeatureContext(driver, dsn string, initDB DBInitializeFn) *FeatureContext {
 	return &FeatureContext{
-		dsn:    dsn,
-		driver: driver,
-		initDB: initDB,
+		dsn:     dsn,
+		useTxDB: true,
+		driver:  driver,
+		initDB:  initDB,
 	}
 }
 
@@ -57,12 +59,21 @@ func (c *FeatureContext) registerTxDB() {
 
 // beforeScenario is called before each scenario and resets the database.
 func (c *FeatureContext) beforeScenario(interface{}) {
-	once.Do(c.registerTxDB)
+	if c.useTxDB {
+		once.Do(c.registerTxDB)
+	}
+
 	if c.db != nil {
 		c.db.Close()
 	}
 
-	db, err := sql.Open(txDBDriver, "godog-feature-contexts")
+	driver, dsn := c.driver, c.dsn
+	if c.useTxDB {
+		driver = txDBDriver
+		dsn = "godog-feature-contexts"
+	}
+
+	db, err := sql.Open(driver, dsn)
 	if err != nil {
 		panic(err)
 	}
@@ -153,6 +164,10 @@ func (c *FeatureContext) iShouldHaveCountRowsInTable(expectedCount int, tableNam
 	}
 
 	return nil
+}
+
+func (c *FeatureContext) WithoutTxDB() {
+	c.useTxDB = false
 }
 
 // Register registers the feature context to the godog suite.
