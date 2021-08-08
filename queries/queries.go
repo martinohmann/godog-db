@@ -105,10 +105,12 @@ func Diff(db *goqu.Database, tableName string, expected *datatable.DataTable) (*
 		row := convertRawResult(rawResult)
 
 		if index := result.Missing.FindRow(row); index >= 0 {
-			result.Matching.AppendRow(row)
+			if err := result.Matching.AppendRow(row); err != nil {
+				return nil, err
+			}
 			result.Missing.RemoveRow(index)
-		} else {
-			result.Additional.AppendRow(row)
+		} else if err := result.Additional.AppendRow(row); err != nil {
+			return nil, err
 		}
 	}
 
